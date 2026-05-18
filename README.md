@@ -1,70 +1,141 @@
-Voice-Activated System Controller
-A Python-based utility that monitors audio input in real-time to execute system commands via voice. Currently configured to handle secure, hands-free system shutdowns using the Google Speech Recognition API.
+# AeroSleep
 
-🚀 Features
-Real-time Audio Processing: Continuous background monitoring with dynamic energy thresholding to adapt to ambient noise.
+A minimalist voice-activated system power management daemon that implements real-time audio stream processing for hands-free OS control.
 
-Cross-Platform Logic: Built with a modular structure to detect and handle different Operating Systems (Windows support included).
+## Architecture
 
-Graceful Termination: Includes a safety buffer (5-second delay) before execution to prevent accidental shutdowns.
+AeroSleep operates as a continuous event loop that interfaces with three primary subsystems:
 
-Robust Error Handling: Managed exceptions for network timeouts, unintelligible speech, and user interrupts.
+1. **Audio Capture Layer** (PyAudio): Low-level microphone stream management
+2. **Speech Recognition Pipeline** (Google Web Speech API): Cloud-based acoustic model inference
+3. **OS Command Interface**: Platform-specific system call execution
 
-🛠️ Prerequisites
-Before running the script, ensure you have the following installed:
+The core design philosophy prioritizes reliability over feature richness—the system does one thing well: monitor for a specific wake phrase and execute a graceful shutdown sequence.
 
-Python 3.7+
+## Technical Implementation
 
-PyAudio: Required for microphone access.
+### Audio Processing Pipeline
 
-Windows: pip install pyaudio
+The recognizer operates with dynamic energy thresholding, which continuously adapts to ambient noise characteristics:
 
-Linux: sudo apt-get install python3-pyaudio
+```python
+recognizer.dynamic_energy_threshold = True
+```
 
-SpeechRecognition Library:
+This adaptive mechanism solves the cold-start problem inherent in fixed-threshold systems, where initial calibration in quiet environments fails catastrophically when deployed in noisy contexts. The energy threshold auto-adjusts based on a rolling window of ambient audio levels, providing robust performance across diverse acoustic environments.
 
-pip install SpeechRecognition
+### Recognition Loop
 
-📦 Installation & Setup
-Clone the Repository:
+The core listening loop implements a blocking architecture:
 
-Bash
+```python
+while True:
+    audio = recognizer.listen(source)
+    # Process audio chunk
+```
 
+This design trades CPU efficiency for simplicity—the thread blocks on `listen()`, eliminating complex async coordination. For a single-purpose daemon, this is architecturally appropriate. The recognizer buffers audio until silence detection triggers, then sends the complete utterance to the recognition backend.
+
+### Network Transport
+
+Audio is serialized to FLAC format (lossless compression) and transmitted via HTTPS to Google's speech API. The system handles three failure modes:
+
+- **Network timeout**: Typically indicates connectivity issues
+- **Recognition failure**: Unintelligible speech or excessive noise
+- **API errors**: Service unavailability or rate limiting
+
+All exceptions are caught and logged non-fatally—the daemon continues monitoring.
+
+### Command Execution Safety
+
+A 5-second countdown provides a critical safety window:
+
+```python
+time.sleep(5)  # Grace period for user intervention
+os.system("shutdown /s /t 0")
+```
+
+This delay allows users to abort via Ctrl+C if the recognition was spurious (e.g., TV dialogue, conversation fragments). Without this buffer, false positives would be catastrophic.
+
+The `/t 0` flag executes immediate shutdown post-delay. On Windows, `shutdown /a` can abort if caught within the grace period.
+
+## Cross-Platform Considerations
+
+Current implementation targets Windows (`shutdown /s`). Extension to POSIX systems requires:
+
+```python
+if platform.system() == "Windows":
+    os.system("shutdown /s /t 0")
+elif platform.system() == "Linux":
+    os.system("sudo systemctl poweroff")
+elif platform.system() == "Darwin":  # macOS
+    os.system("sudo shutdown -h now")
+```
+
+Note: POSIX variants require sudo privileges, necessitating either passwordless sudo configuration or a privileged daemon architecture.
+
+## Dependencies
+
+- **Python 3.7+**: f-string support, type hints
+- **PyAudio**: PortAudio bindings for cross-platform audio I/O
+- **SpeechRecognition**: Abstraction layer over multiple ASR backends
+
+### Installation
+
+```bash
+# Clone repository
 git clone https://github.com/Eamon2009/Shutdown_by_voice.git
 cd voice-system-control
-Install Dependencies:
 
-Bash
-
+# Install Python dependencies
 pip install -r requirements.txt
-Run the Monitor:
 
-Bash
+# Linux-specific: Install PortAudio system library
+sudo apt-get install python3-pyaudio portaudio19-dev
+```
 
+## Usage
+
+```bash
 python voice_monitor.py
-🖥️ Usage
-Once the script is active, it will display --- Voice Control Active ---.
+```
 
-Trigger Command: Clearly say "Shutdown system".
+Output:
+```
+--- Voice Control Active ---
+Listening...
+```
 
-Execution: The script will log the detection and trigger a 5-second countdown before the OS executes the power-off sequence.
+Speak clearly: **"Shutdown system"**
 
-Exit: Press Ctrl + C in the terminal to stop the monitor manually.
+The system logs detection and initiates the countdown sequence.
 
-⚙️ How it Works
-The script utilizes a continuous while loop combined with the recognizer.listen() method.
+**Interrupt**: Press `Ctrl+C` to terminate the daemon gracefully.
 
-Component	Function
-dynamic_energy_threshold	Automatically adjusts to the room's noise level for better accuracy.
-recognize_google	Sends audio snippets to Google’s Web Speech API for high-accuracy transcription.
-os.system	Interfaces directly with the Windows shell to execute the /s (shutdown) command.
+## Limitations & Design Tradeoffs
 
-Export to Sheets
+### 1. Cloud Dependency
+Google's API requires internet connectivity. Offline alternatives (Vosk, PocketSphinx) sacrifice accuracy for autonomy. For a critical system command, accuracy is non-negotiable.
 
-⚠️ Safety Note
-This script executes a forced shutdown. Ensure all work is saved before testing the voice command. To cancel a pending shutdown on Windows after the script has run, you can quickly type shutdown /a in a command prompt.
+### 2. Single Wake Phrase
+Hardcoded to "shutdown system". Extending to multiple commands requires a state machine:
+```
+Listen → Detect wake word → Parse command → Execute
+```
 
-🤝 Contributing
-Contributions are welcome! If you would like to add support for macOS/Linux commands or additional voice triggers (like "Restart" or "Sleep"), please feel free to fork the repo and submit a pull request.
+### 3. No Speaker Verification
+Any voice can trigger shutdown. Production systems should implement voice biometrics or require a spoken PIN.
 
-Disclaimer: This tool is intended for personal automation and accessibility purposes. Use with caution in production environments.
+### 4. Blocking Architecture
+Single-threaded design limits extensibility. Async refactor would enable parallel command queuing but adds complexity.
+
+## Security Considerations
+
+**This tool executes privileged system commands based on audio input.** Threat model:
+
+- **Physical access**: Attacker with microphone proximity can trigger shutdown
+- **Audio injection**: Malicious media playback (TV, YouTube) could contain wake phrase
+- **Denial of service**: Repeated shutdowns in multi-user environments
+---
+
+**License**: MIT  
