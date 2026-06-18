@@ -2,28 +2,6 @@
 
 A minimalist voice-activated system power management daemon that implements real-time audio stream processing for hands-free OS control.
 
-## Architecture
-
-AeroSleep operates as a continuous event loop that interfaces with three primary subsystems:
-
-1. **Audio Capture Layer** (PyAudio): Low-level microphone stream management
-2. **Speech Recognition Pipeline** (Google Web Speech API): Cloud-based acoustic model inference
-3. **OS Command Interface**: Platform-specific system call execution
-
-The core design philosophy prioritizes reliability over feature richness—the system does one thing well: monitor for a specific wake phrase and execute a graceful shutdown sequence.
-
-## Technical Implementation
-
-### Audio Processing Pipeline
-
-The recognizer operates with dynamic energy thresholding, which continuously adapts to ambient noise characteristics:
-
-```python
-recognizer.dynamic_energy_threshold = True
-```
-
-This adaptive mechanism solves the cold-start problem inherent in fixed-threshold systems, where initial calibration in quiet environments fails catastrophically when deployed in noisy contexts. The energy threshold auto-adjusts based on a rolling window of ambient audio levels, providing robust performance across diverse acoustic environments.
-
 ### Recognition Loop
 
 The core listening loop implements a blocking architecture:
@@ -35,16 +13,6 @@ while True:
 ```
 
 This design trades CPU efficiency for simplicity—the thread blocks on `listen()`, eliminating complex async coordination. For a single-purpose daemon, this is architecturally appropriate. The recognizer buffers audio until silence detection triggers, then sends the complete utterance to the recognition backend.
-
-### Network Transport
-
-Audio is serialized to FLAC format (lossless compression) and transmitted via HTTPS to Google's speech API. The system handles three failure modes:
-
-- **Network timeout**: Typically indicates connectivity issues
-- **Recognition failure**: Unintelligible speech or excessive noise
-- **API errors**: Service unavailability or rate limiting
-
-All exceptions are caught and logged non-fatally—the daemon continues monitoring.
 
 ### Command Execution Safety
 
@@ -85,7 +53,7 @@ Note: POSIX variants require sudo privileges, necessitating either passwordless 
 ```bash
 # Clone repository
 git clone https://github.com/Eamon2009/Shutdown_by_voice.git
-cd voice-system-control
+cd AeroSleep
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -97,7 +65,8 @@ sudo apt-get install python3-pyaudio portaudio19-dev
 ## Usage
 
 ```bash
-python voice_monitor.py
+cd src
+python main.py
 ```
 
 Output:
@@ -111,23 +80,6 @@ Speak clearly: **"Shutdown system"**
 The system logs detection and initiates the countdown sequence.
 
 **Interrupt**: Press `Ctrl+C` to terminate the daemon gracefully.
-
-## Limitations & Design Tradeoffs
-
-### 1. Cloud Dependency
-Google's API requires internet connectivity. Offline alternatives (Vosk, PocketSphinx) sacrifice accuracy for autonomy. For a critical system command, accuracy is non-negotiable.
-
-### 2. Single Wake Phrase
-Hardcoded to "shutdown system". Extending to multiple commands requires a state machine:
-```
-Listen → Detect wake word → Parse command → Execute
-```
-
-### 3. No Speaker Verification
-Any voice can trigger shutdown. Production systems should implement voice biometrics or require a spoken PIN.
-
-### 4. Blocking Architecture
-Single-threaded design limits extensibility. Async refactor would enable parallel command queuing but adds complexity.
 
 ## Security Considerations
 
