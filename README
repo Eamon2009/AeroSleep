@@ -1,17 +1,17 @@
 AeroSleep
 =========
+
 A hybrid voice-activated system power management daemon. The architecture delegates real-time audio stream processing and Automated Speech Recognition (ASR) to a Python orchestration layer, which invokes a high-privilege C-based execution binary to handle platform-specific shutdown routines.
 
 Architecture Overview
 ---------------------
-```
-[Audio Input] -> (Python Daemon: SpeechRecognition) -> [Keyword Match] -> (C Executable) -> [OS Shutdown]
 
-```
+[Audio Input] -> (Python Daemon: SpeechRecognition) -> [Keyword Match] -> (C Executable) -> [OS Shutdown]
 
 Compilation & Installation
 -------------------------
 Dependencies
+
  * Python 3.7+
 
 * PyAudio (PortAudio bindings)
@@ -25,24 +25,20 @@ Build Pipeline
 --------------
 Compile native execution layer
 * For POSIX (Linux/macOS)
-```
+
 gcc -O2 -o aerosleep_sys main.c
-```
 
 * For Windows (MinGW)
-```
+
 gcc -O2 -o aerosleep_sys.exe main.c
-```
 
 * Install Python runtime dependencies
-```
+
 pip install -r requirements.txt
 cd src
 python main.py
 
-```
 
-  
 Security Considerations
 ======================
 
