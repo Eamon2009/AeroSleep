@@ -51,6 +51,7 @@ This tool executes privileged system commands based on audio input.Threat model:
 - * Physical access: Attacker with microphone proximity can trigger shutdown
 - * Audio injection: Malicious media playback (TV, YouTube) could contain wake phrase
 - * Denial of service: Repeated shutdowns in multi-user environments
----
+
+
 
 License: MIT  
