@@ -50,4 +50,6 @@ This tool executes privileged system commands based on audio input.Threat model:
 
 
 
-License: MIT  
+License
+=======
+GPL  
